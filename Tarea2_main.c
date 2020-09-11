@@ -29,7 +29,7 @@
  */
  
 /**
- * @file    scheduler.c
+ * @file    Tarea2.c
  * @brief   Application entry point.
  */
 #include <stdio.h>
@@ -40,7 +40,6 @@
 #include "MK66F18.h"
 #include "fsl_debug_console.h"
 /* TODO: insert other include files here. */
-
 /* TODO: insert other definitions and declarations here. */
 #define RTOS_STACK_SIZE 500
 
@@ -54,6 +53,7 @@
 
 #define STACK_PSR_DEFAULT 0x01000000
 
+
 /*PRIORITY DEFINES*/
 
 #define PRIORITY_TASK0 0
@@ -64,18 +64,16 @@
 
 /*DELAY DEFINES*/
 
-#define DELAY_TASK0 10
-#define DELAY_TASK1 30
-#define DELAY_TASK2 20
+#define DELAY_TASK0 1
+#define DELAY_TASK1 3
+#define DELAY_TASK2 2
 
-uint8_t priority_currentTask = 0; /* Variable that show the priority of the running task */
-
+uint8_t current_priority;
 typedef enum
 {
   stateReady,
   stateRunning,
-  stateWaiting,
-  stateSuspend
+  stateWaiting
 } rtosTaskState_t;
 
 typedef enum
@@ -117,77 +115,80 @@ void rtosStart(void);
 void rtosReloadSysTick(void);
 
 void rtosDelay(uint64_t ticks);
-/*
- * @brief   Application entry point.
- */
-int main(void) {
 
-  	/* Init board hardware. */
-    BOARD_InitBootPins();
-    BOARD_InitBootClocks();
-    BOARD_InitBootPeripherals();
+void rtosActivateWaitingTask(void);
+
+void rtosKernel(rtosContextSwitchFrom_t from);
+
+int main(void)
+{
+
+  /* Init board hardware. */
+  BOARD_InitBootPins();
+  BOARD_InitBootClocks();
+  BOARD_InitBootPeripherals();
 #ifndef BOARD_INIT_DEBUG_CONSOLE_PERIPHERAL
-    /* Init FSL debug console. */
-    BOARD_InitDebugConsole();
+  /* Init FSL debug console. */
+  BOARD_InitDebugConsole();
 #endif
 
-    /* Task 0 struct fill-in*/
-    task_list.tasks[0].task_body = task0;
-     task_list.tasks[0].sp = &(task_list.tasks[0].stack[RTOS_STACK_SIZE - 1])
-       - STACK_FRAME_SIZE;
-     task_list.tasks[0].stack[RTOS_STACK_SIZE - STACK_PC_OFFSET] =
-       (uint32_t) task0;
-     task_list.tasks[0].stack[RTOS_STACK_SIZE - STACK_PSR_OFFSET] =
-       (STACK_PSR_DEFAULT);
-     task_list.tasks[0].state = stateReady;
-     task_list.tasks[0].priority = PRIORITY_TASK0;
-     task_list.nTask++;
 
-     /* Task 1 struct fill-in*/
-     task_list.tasks[1].task_body = task1;
-      task_list.tasks[1].sp = &(task_list.tasks[1].stack[RTOS_STACK_SIZE - 1])
-        - STACK_FRAME_SIZE;
-      task_list.tasks[1].stack[RTOS_STACK_SIZE - STACK_PC_OFFSET] =
-        (uint32_t) task1;
-      task_list.tasks[1].stack[RTOS_STACK_SIZE - STACK_PSR_OFFSET] =
-        (STACK_PSR_DEFAULT);
-      task_list.tasks[1].state = stateReady;
-      task_list.tasks[1].priority = PRIORITY_TASK1;
-      task_list.nTask++;
+  task_list.tasks[0].task_body = task0;
+  task_list.tasks[0].sp = &(task_list.tasks[0].stack[RTOS_STACK_SIZE - 1])
+    - STACK_FRAME_SIZE;
+  task_list.tasks[0].stack[RTOS_STACK_SIZE - STACK_PC_OFFSET] =
+    (uint32_t) task0;
+  task_list.tasks[0].stack[RTOS_STACK_SIZE - STACK_PSR_OFFSET] =
+    (STACK_PSR_DEFAULT);
+  task_list.tasks[0].state = stateReady;
+  task_list.tasks[0].priority = PRIORITY_TASK0;
+  task_list.nTask++;
 
-      /* Task 0 struct fill-in*/
-      task_list.tasks[2].task_body = task2;
-       task_list.tasks[2].sp = &(task_list.tasks[2].stack[RTOS_STACK_SIZE - 1])
-         - STACK_FRAME_SIZE;
-       task_list.tasks[2].stack[RTOS_STACK_SIZE - STACK_PC_OFFSET] =
-         (uint32_t) task2;
-       task_list.tasks[2].stack[RTOS_STACK_SIZE - STACK_PSR_OFFSET] =
-         (STACK_PSR_DEFAULT);
-       task_list.tasks[2].state = stateReady;
-       task_list.tasks[2].priority = PRIORITY_TASK2;
-       task_list.nTask++;
+  task_list.tasks[1].task_body = task1;
+  task_list.tasks[1].sp = &(task_list.tasks[1].stack[RTOS_STACK_SIZE - 1])
+    - STACK_FRAME_SIZE;
+  task_list.tasks[1].stack[RTOS_STACK_SIZE - STACK_PC_OFFSET] =
+    (uint32_t) task1;
+  task_list.tasks[1].stack[RTOS_STACK_SIZE - STACK_PSR_OFFSET] =
+    (STACK_PSR_DEFAULT);
+  task_list.tasks[1].state = stateReady;
+  task_list.tasks[1].priority = PRIORITY_TASK1;
+  task_list.nTask++;
 
-       /* Idle task struct fill-in*/
-       task_list.tasks[task_list.nTask].task_body = taskIdel;
-       task_list.tasks[task_list.nTask].sp =
-         &(task_list.tasks[task_list.nTask].stack[RTOS_STACK_SIZE - 1])
-           - STACK_FRAME_SIZE;
-       task_list.tasks[task_list.nTask].stack[RTOS_STACK_SIZE - STACK_PC_OFFSET] =
-         (uint32_t) taskIdel;
-       task_list.tasks[task_list.nTask].stack[RTOS_STACK_SIZE - STACK_PSR_OFFSET] =
-         (STACK_PSR_DEFAULT);
-       task_list.tasks[task_list.nTask].state = stateReady;
-       task_list.tasks[2].priority = PRIORITY_IDLETASK;
-       NVIC_SetPriority(PendSV_IRQn, 0xFF);
-       PRINTF("RTOS Init\n\r");
-    /* Enter an infinite loop, just incrementing a counter. */
-    while(1) {
-        /* 'Dummy' NOP to allow source level single stepping of
-            tight while() loop */
-        rtosStart();
-        __asm volatile ("nop");
-    }
-    return 0 ;
+  task_list.tasks[2].task_body = task2;
+  task_list.tasks[2].sp = &(task_list.tasks[2].stack[RTOS_STACK_SIZE - 1])
+    - STACK_FRAME_SIZE;
+  task_list.tasks[2].stack[RTOS_STACK_SIZE - STACK_PC_OFFSET] =
+    (uint32_t) task2;
+  task_list.tasks[2].stack[RTOS_STACK_SIZE - STACK_PSR_OFFSET] =
+    (STACK_PSR_DEFAULT);
+  task_list.tasks[2].state = stateReady;
+  task_list.tasks[2].priority = PRIORITY_TASK2;
+ // task_list.nTask++;
+
+  /* idle task*/
+ // task_list.tasks[task_list.nTask].task_body = taskIdel;
+  //task_list.tasks[task_list.nTask].sp =
+   // &(task_list.tasks[task_list.nTask].stack[RTOS_STACK_SIZE - 1])
+    //  - STACK_FRAME_SIZE;
+  //task_list.tasks[task_list.nTask].stack[RTOS_STACK_SIZE - STACK_PC_OFFSET] =
+    //(uint32_t) taskIdel;
+  //task_list.tasks[task_list.nTask].stack[RTOS_STACK_SIZE - STACK_PSR_OFFSET] =
+    //(STACK_PSR_DEFAULT);
+ // task_list.tasks[task_list.nTask].state = stateReady;
+
+  NVIC_SetPriority(PendSV_IRQn, 0xFF);
+
+  PRINTF("RTOS Init\n\r");
+
+  while (1)
+  {
+    rtosStart();
+
+    __asm volatile ("nop");
+  }
+
+  return 0;
 }
 
 void task0(void) // LED Red
@@ -201,10 +202,11 @@ void task0(void) // LED Red
   }
 }
 
-void task1(void) // LED Red
+void task1(void) // LED Green
 {
   while (1)
   {
+
 
     PRINTF("Task_1\n\r");
 
@@ -212,10 +214,11 @@ void task1(void) // LED Red
   }
 }
 
-void task2(void) // LED Red
+void task2(void) // LED Blue
 {
   while (1)
   {
+
 
     PRINTF("Task_2\n\r");
 
@@ -265,17 +268,14 @@ void rtosActivateWaitingTask(void)
       task_list.tasks[idx].local_tick--;
       if (0 == task_list.tasks[idx].local_tick)
       {
-
-    	if( priority_currentTask > task_list.tasks[idx].priority)
+    	if(current_priority >= task_list.tasks[idx].priority)
     	{
-
-    		task_list.tasks[idx].state = stateReady;
-
+    		 task_list.tasks[idx].state = stateReady;
     	}
     	else
     	{
     		task_list.tasks[idx].state = stateWaiting;
-    		/* Do nothing */
+
     	}
       }
     }
@@ -287,7 +287,6 @@ void rtosKernel(rtosContextSwitchFrom_t from)
   uint8_t nextTask = task_list.nTask;
   uint8_t findNextTask = task_list.current_task + 1;
   uint8_t foundNextTask = 0;
-
 
   static uint8_t first = 1;
   register uint32_t r0 asm("r0");
@@ -302,7 +301,6 @@ void rtosKernel(rtosContextSwitchFrom_t from)
       if (stateReady == task_list.tasks[findNextTask].state
         || stateRunning == task_list.tasks[findNextTask].state)
       {
-
         nextTask = findNextTask;
 
         foundNextTask = 1;
@@ -348,6 +346,7 @@ void rtosKernel(rtosContextSwitchFrom_t from)
 
     task_list.current_task = task_list.next_task;
     task_list.tasks[task_list.current_task].state = stateRunning;
+    current_priority = task_list.tasks[task_list.current_task].priority;
     SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk; // Set PendSV to pending
   }
 }
