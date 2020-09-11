@@ -29,7 +29,7 @@
  */
  
 /**
- * @file    Tarea2_EnriqueTeran.c
+ * @file    scheduler.c
  * @brief   Application entry point.
  */
 #include <stdio.h>
@@ -220,4 +220,135 @@ void taskIdel(void)
 {
   for (;;)
     ;
+}
+
+void rtosStart(void)
+{
+  task_list.global_tick = 0;
+  task_list.current_task = -1;
+
+  SysTick->CTRL =
+  SysTick_CTRL_CLKSOURCE_Msk | SysTick_CTRL_TICKINT_Msk
+    | SysTick_CTRL_ENABLE_Msk;
+  rtosReloadSysTick();
+  for (;;)
+    ;
+}
+
+void rtosReloadSysTick(void)
+{
+  SysTick->LOAD = (SystemCoreClock / 1e3);
+  SysTick->VAL = 0;
+}
+
+void rtosDelay(uint64_t ticks)
+{
+  task_list.tasks[task_list.current_task].state = stateWaiting;
+  task_list.tasks[task_list.current_task].local_tick = ticks;
+  rtosKernel(from_execution);
+}
+
+void rtosActivateWaitingTask(void)
+{
+  uint8_t idx;
+  for (idx = 0; idx < task_list.nTask; idx++)
+  {
+    if (stateWaiting == task_list.tasks[idx].state)
+    {
+      task_list.tasks[idx].local_tick--;
+      if (0 == task_list.tasks[idx].local_tick)
+      {
+        task_list.tasks[idx].state = stateReady;
+      }
+    }
+  }
+}
+
+void rtosKernel(rtosContextSwitchFrom_t from)
+{
+  uint8_t nextTask = task_list.nTask;
+  uint8_t findNextTask = task_list.current_task + 1;
+  uint8_t foundNextTask = 0;
+
+  static uint8_t first = 1;
+  register uint32_t r0 asm("r0");
+
+  (void) r0;
+
+  /* calendarizador */
+  do
+  {
+    if (findNextTask < task_list.nTask)
+    {
+      if (stateReady == task_list.tasks[findNextTask].state
+        || stateRunning == task_list.tasks[findNextTask].state)
+      {
+        nextTask = findNextTask;
+
+        foundNextTask = 1;
+      }
+      else if (findNextTask == task_list.current_task)
+      {
+        foundNextTask = 1;
+      }
+      else
+      {
+        findNextTask++;
+      }
+    }
+    else
+    {
+      findNextTask = 0;
+    }
+  } while (!foundNextTask);
+
+  task_list.next_task = nextTask;
+
+  /* context swtich */
+  if (task_list.current_task != task_list.next_task)
+  { // Context switching needed
+    if (!first)
+    {
+      asm("mov r0, r7");
+      task_list.tasks[task_list.current_task].sp = (uint32_t*) r0;
+      if (from)
+      {
+        task_list.tasks[task_list.current_task].sp -= (-7);
+        task_list.tasks[task_list.current_task].state = stateReady;
+      }
+      else
+      {
+        task_list.tasks[task_list.current_task].sp -= (9);
+      }
+    }
+    else
+    {
+      first = 0;
+    }
+
+    task_list.current_task = task_list.next_task;
+    task_list.tasks[task_list.current_task].state = stateRunning;
+    SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk; // Set PendSV to pending
+  }
+}
+
+void SysTick_Handler(void) // 1KHz
+{
+// Increment systick counter for LED blinking
+  task_list.global_tick++;
+
+  rtosActivateWaitingTask();
+
+  rtosReloadSysTick();
+
+  rtosKernel(from_isr);
+}
+
+void PendSV_Handler(void) // Context switching code
+{
+  register int32_t r0 asm("r0");
+  (void) r0;
+  SCB->ICSR |= SCB_ICSR_PENDSVCLR_Msk;
+  r0 = (int32_t) task_list.tasks[task_list.current_task].sp;
+  asm("mov r7,r0");
 }
