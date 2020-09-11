@@ -178,13 +178,13 @@ int main(void) {
          (STACK_PSR_DEFAULT);
        task_list.tasks[task_list.nTask].state = stateReady;
        task_list.tasks[2].priority = PRIORITY_IDLETASK;
-    /* Force the counter to be placed into memory. */
-    volatile static int i = 0 ;
+       NVIC_SetPriority(PendSV_IRQn, 0xFF);
+       PRINTF("RTOS Init\n\r");
     /* Enter an infinite loop, just incrementing a counter. */
     while(1) {
-        i++ ;
         /* 'Dummy' NOP to allow source level single stepping of
             tight while() loop */
+        rtosStart();
         __asm volatile ("nop");
     }
     return 0 ;
@@ -274,6 +274,7 @@ void rtosActivateWaitingTask(void)
     	}
     	else
     	{
+    		task_list.tasks[idx].state = stateWaiting;
     		/* Do nothing */
     	}
       }
