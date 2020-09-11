@@ -59,16 +59,23 @@
 #define PRIORITY_TASK0 0
 #define PRIORITY_TASK1 2
 #define PRIORITY_TASK2 1
-#define PRIORITY_TASK3 3
+#define PRIORITY_TASK3 3 //Unused
 #define PRIORITY_IDLETASK 4
 
+/*DELAY DEFINES*/
 
+#define DELAY_TASK0 10
+#define DELAY_TASK1 30
+#define DELAY_TASK2 20
+
+uint8_t priority_currentTask = 0; /* Variable that show the priority of the running task */
 
 typedef enum
 {
   stateReady,
   stateRunning,
-  stateWaiting
+  stateWaiting,
+  stateSuspend
 } rtosTaskState_t;
 
 typedef enum
@@ -190,7 +197,7 @@ void task0(void) // LED Red
 
     PRINTF("Task_0\n\r");
 
-    rtosDelay(10);
+    rtosDelay(DELAY_TASK0);
   }
 }
 
@@ -201,7 +208,7 @@ void task1(void) // LED Red
 
     PRINTF("Task_1\n\r");
 
-    rtosDelay(30);
+    rtosDelay(DELAY_TASK1);
   }
 }
 
@@ -212,7 +219,7 @@ void task2(void) // LED Red
 
     PRINTF("Task_2\n\r");
 
-    rtosDelay(20);
+    rtosDelay(DELAY_TASK2);
   }
 }
 
@@ -258,7 +265,17 @@ void rtosActivateWaitingTask(void)
       task_list.tasks[idx].local_tick--;
       if (0 == task_list.tasks[idx].local_tick)
       {
-        task_list.tasks[idx].state = stateReady;
+
+    	if( priority_currentTask > task_list.tasks[idx].priority)
+    	{
+
+    		task_list.tasks[idx].state = stateReady;
+
+    	}
+    	else
+    	{
+    		/* Do nothing */
+    	}
       }
     }
   }
@@ -269,6 +286,7 @@ void rtosKernel(rtosContextSwitchFrom_t from)
   uint8_t nextTask = task_list.nTask;
   uint8_t findNextTask = task_list.current_task + 1;
   uint8_t foundNextTask = 0;
+
 
   static uint8_t first = 1;
   register uint32_t r0 asm("r0");
@@ -283,6 +301,7 @@ void rtosKernel(rtosContextSwitchFrom_t from)
       if (stateReady == task_list.tasks[findNextTask].state
         || stateRunning == task_list.tasks[findNextTask].state)
       {
+
         nextTask = findNextTask;
 
         foundNextTask = 1;
